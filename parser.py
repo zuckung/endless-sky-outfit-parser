@@ -19,15 +19,17 @@ def main():
                 'human\weapons.txt' in os.path.join(root, name)):
                 paths.append(os.path.join(root, name))
     raw_df = pd.concat([file_parser(path) for path in paths], join='outer', ignore_index=True)
+    print(f'Parsing complete.')
 
     # Set up dataframes and export to xlsx
-    group = raw_df.groupby('category')
-    dfs = [group.get_group(g) for g in group.groups]
+    gp = raw_df.groupby('category')
+    dfs = [gp.get_group(g).dropna(axis='columns', how='all') for g in gp.groups]
+    root_dict = dict(zip(gp.groups.keys(), dfs))
+    
     with pd.ExcelWriter('outfits.xlsx') as writer:
-        for df in dfs:
-            new_df = df.dropna(axis='columns', how='all')
-            new_df.to_excel(writer, sheet_name=df['category'].iloc[0])
-    print(f'Parsing complete.')
+        for key, value in root_dict.items():
+            value.to_excel(writer, sheet_name=key)
+    print(f'Write operation complete.')
 
 ################################################################################
 

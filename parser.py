@@ -18,18 +18,20 @@ def main():
                 'human\power.txt' in os.path.join(root, name) or
                 'human\weapons.txt' in os.path.join(root, name)):
                 paths.append(os.path.join(root, name))
-    raw_df = pd.concat([file_parser(path) for path in paths], join='outer', ignore_index=True)
+    raw_df = pd.concat([file_parser(path) for path in paths],
+                       join='outer', ignore_index=True)
     print(f'Parsing complete.')
 
-    # Set up dataframes and export to xlsx
+    # Set up dataframes
+    useless = ['plural', 'series', 'index', 'thumbnail', '']
+    raw_df.drop(useless, axis='columns', inplace=True)
     gp = raw_df.groupby('category')
     dfs = [gp.get_group(g).dropna(axis='columns', how='all') for g in gp.groups]
     root_dict = dict(zip(gp.groups.keys(), dfs))
     
-    with pd.ExcelWriter('outfits.xlsx') as writer:
-        for key, value in root_dict.items():
-            value.to_excel(writer, sheet_name=key)
-    print(f'Write operation complete.')
+    split_dataframes(root_dict)
+    export(root_dict)
+    return
 
 ################################################################################
 
@@ -54,7 +56,6 @@ def file_parser(path_str):
                 if outfit is not None:
                     # Skip effects
                     data.append(outfit)
-
     return pd.DataFrame.from_dict(data)
 
 ################################################################################
@@ -81,11 +82,19 @@ def outfit_parser(line, it):
             # Stop and return on empty line
             break
         elif (
+            line.startswith('#') or
             line.startswith('description') or
+            line.startswith('"description"') or
             line.startswith('weapon') or
+            line.startswith('"rewind"') or
+            line.startswith('"random start frame"') or
+            line.startswith('"no repeat"') or
             line.startswith('stream') or
+            line.startswith('"stream"') or
             line.startswith('cluster') or
-            line.startswith('safe')):
+            line.startswith('"cluster"') or
+            line.startswith('safe') or
+            line.startswith('"safe"')):
             # Skip useless attributes
             continue
         elif line.startswith('licenses'):
@@ -105,6 +114,25 @@ def outfit_parser(line, it):
             key, value = key.strip(st), value.strip(st)
             data[key] = value
     return data
+
+################################################################################
+
+def split_dataframes(root_dict):
+    # Split Power category
+    power_sheets = ['Power(Battery)', 'Power(Reactor)', 'Power(Solar)']
+    power_dfs = [pd.DataFrame() for i in range(3)]
+    power_df = root_dict['Power']
+    
+
+################################################################################
+
+def export(root_dict):
+    # Export to xlsx
+    with pd.ExcelWriter('outfits.xlsx') as writer:
+        for key, value in root_dict.items():
+            value.to_excel(writer, sheet_name=key)
+    print(f'Write operation complete.')
+    return
 
 ################################################################################
 

@@ -120,8 +120,11 @@ def format_raw(raw_df):
     raw_df = raw_df.convert_dtypes()
     raw_df = raw_df.apply(cast_to_float)
     raw_df['outfit space'] = raw_df['outfit space'] * -1
-    raw_df['heat generation'] = raw_df['heat generation'] * 60
+    raw_df['active cooling'] = raw_df['active cooling'] * 60
+    raw_df['cooling'] = raw_df['cooling'] * 60
     raw_df['energy generation'] = raw_df['energy generation'] * 60
+    raw_df['energy consumption'] = raw_df['energy consumption'] * 60
+    raw_df['cooling energy'] = raw_df['cooling energy'] * 60
     return raw_df
 
 ################################################################################
@@ -135,6 +138,36 @@ def cast_to_float(s):
 ################################################################################
 
 def split_dataframes(root_dict):
+    # Split cooling first, deal with other systems later
+    cooling_sheets = ['Systems(Active Cooling)', 'Systems(Passive Cooling)']
+    acooling_df = pd.DataFrame()
+    pcooling_df = pd.DataFrame()
+    systems_df = root_dict['Systems']
+
+    # Active Cooling
+    move_rows = systems_df.loc[systems_df['active cooling'].notnull()]
+    acooling_df = pd.concat([move_rows], join='outer', ignore_index=True)
+    acooling_df.dropna(axis='columns', how='all', inplace=True)
+    acooling_df['h/s'] =\
+        acooling_df['active cooling'].add(\
+        acooling_df['cooling'], fill_value=0) /\
+        acooling_df['outfit space']
+    acooling_df['h/e'] =\
+        acooling_df['active cooling'].add(\
+        acooling_df['cooling'], fill_value=0) /\
+        acooling_df['cooling energy'].add(\
+        acooling_df['energy consumption'], fill_value=0)
+
+    # Passive Cooling
+    move_rows = systems_df.loc[systems_df['cooling'].notnull()]
+    move_rows = move_rows[move_rows['active cooling'].isnull()]
+    pcooling_df = pd.concat([move_rows], join='outer', ignore_index=True)
+    pcooling_df.dropna(axis='columns', how='all', inplace=True)
+    pcooling_df['h/s'] =\
+        pcooling_df['cooling'] / pcooling_df['outfit space']
+
+    ##################################################################
+    
     # Split "Power" category
     power_sheets = ['Power(Battery)', 'Power(Reactor)', 'Power(Solar)']
     power_dfs = [pd.DataFrame() for i in range(3)]
@@ -143,32 +176,39 @@ def split_dataframes(root_dict):
     # Batteries
     move_rows = power_df.loc[power_df['energy capacity'].notnull()]
     power_dfs[0] = pd.concat([move_rows], join='outer', ignore_index=True)
-    power_dfs[0] = power_dfs[0].convert_dtypes()
     power_dfs[0].dropna(axis='columns', how='all', inplace=True)
-    power_dfs[0]['batt/s'] = \
+    power_dfs[0]['batt/s'] =\
         power_dfs[0]['energy capacity'] / power_dfs[0]['outfit space']
     
     # Reactors
     move_rows = power_df.loc[power_df['energy generation'].notnull()]
     power_dfs[1] = pd.concat([move_rows], join='outer', ignore_index=True)
     power_dfs[1].dropna(axis='columns', how='all', inplace=True)
-    power_dfs[1]['e/s'] = \
+    power_dfs[1]['e/s'] =\
         power_dfs[1]['energy generation'] / power_dfs[1]['outfit space']
-    power_dfs[1]['e/h'] = \
+    power_dfs[1]['e/h'] =\
         power_dfs[1]['energy generation'] / power_dfs[1]['heat generation']
 
     # Solar
     move_rows = power_df.loc[power_df['solar collection'].notnull()]
     power_dfs[2] = pd.concat([move_rows], join='outer', ignore_index=True)
     power_dfs[2].dropna(axis='columns', how='all', inplace=True)
-    power_dfs[2]['sol/s'] = \
+    power_dfs[2]['sol/s'] =\
         power_dfs[2]['solar collection'] / power_dfs[2]['outfit space']
 
+    ##################################################################
+
     # Add subcategory dataframes
+    cooling_dict = dict(zip(cooling_sheets, [acooling_df, pcooling_df]))
     power_dict = dict(zip(power_sheets, power_dfs))
+    root_dict.update(cooling_dict)
     root_dict.update(power_dict)
+
+    systems_df = systems_df[~systems_df['outfit'].isin(acooling_df['outfit'])]
+    systems_df = systems_df[~systems_df['outfit'].isin(pcooling_df['outfit'])]
     for i in range(3):
         power_df = power_df[~power_df['outfit'].isin(power_dfs[i]['outfit'])]
+    root_dict['Systems'] = systems_df
     root_dict['Power'] = power_df
 
     return {key: value for key, value in root_dict.items() if not value.empty}

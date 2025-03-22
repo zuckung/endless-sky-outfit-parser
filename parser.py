@@ -29,7 +29,7 @@ def main():
     dfs = [gp.get_group(g).dropna(axis='columns', how='all') for g in gp.groups]
     root_dict = dict(zip(gp.groups.keys(), dfs))
     
-    split_dataframes(root_dict)
+    root_dict = split_dataframes(root_dict)
     export(root_dict)
     return
 
@@ -82,6 +82,7 @@ def outfit_parser(line, it):
             # Stop and return on empty line
             break
         elif (
+            # Skip useless attributes
             line.startswith('#') or
             line.startswith('description') or
             line.startswith('"description"') or
@@ -95,7 +96,6 @@ def outfit_parser(line, it):
             line.startswith('"cluster"') or
             line.startswith('safe') or
             line.startswith('"safe"')):
-            # Skip useless attributes
             continue
         elif line.startswith('licenses'):
             # Skip licenses
@@ -118,11 +118,34 @@ def outfit_parser(line, it):
 ################################################################################
 
 def split_dataframes(root_dict):
-    # Split Power category
+    # Split "Power" category
     power_sheets = ['Power(Battery)', 'Power(Reactor)', 'Power(Solar)']
     power_dfs = [pd.DataFrame() for i in range(3)]
     power_df = root_dict['Power']
+
+    # Batteries
+    move_rows = power_df.loc[power_df['energy capacity'].notnull()]
+    power_dfs[0] = pd.concat([move_rows], join='outer', ignore_index=True)
+    power_dfs[0].dropna(axis='columns', how='all', inplace=True)
     
+    # Reactors
+    move_rows = power_df.loc[power_df['energy generation'].notnull()]
+    power_dfs[1] = pd.concat([move_rows], join='outer', ignore_index=True)
+    power_dfs[1].dropna(axis='columns', how='all', inplace=True)
+
+    # Solar
+    move_rows = power_df.loc[power_df['solar collection'].notnull()]
+    power_dfs[2] = pd.concat([move_rows], join='outer', ignore_index=True)
+    power_dfs[2].dropna(axis='columns', how='all', inplace=True)
+
+    # Add subcategory dataframes
+    power_dict = dict(zip(power_sheets, power_dfs))
+    root_dict.update(power_dict)
+    for i in range(3):
+        power_df = power_df[~power_df['outfit'].isin(power_dfs[i]['outfit'])]
+    root_dict['Power'] = power_df
+
+    return {key: value for key, value in root_dict.items() if not value.empty}
 
 ################################################################################
 

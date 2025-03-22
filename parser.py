@@ -34,6 +34,7 @@ def main():
 
 def file_parser(path_str):
     print(f'Current file: {path_str}')
+    species = path_str.split('\\')[-2]
     path = Path(path_str)
     raw_data = []
     data = []
@@ -53,7 +54,9 @@ def file_parser(path_str):
                 if outfit is not None:
                     # Skip effects
                     data.append(outfit)
-    return pd.DataFrame.from_dict(data)
+    df = pd.DataFrame.from_dict(data)
+    df.insert(2, "species", species)
+    return df
 
 ################################################################################
     

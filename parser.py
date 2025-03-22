@@ -23,13 +23,10 @@ def main():
     print(f'Parsing complete.')
 
     # Set up dataframes
-    useless = ['plural', 'series', 'index', 'thumbnail', '']
-    raw_df.drop(useless, axis='columns', inplace=True)
+    raw_df = format_raw(raw_df)
     gp = raw_df.groupby('category')
     dfs = [gp.get_group(g).dropna(axis='columns', how='all') for g in gp.groups]
-    root_dict = dict(zip(gp.groups.keys(), dfs))
-    
-    root_dict = split_dataframes(root_dict)
+    root_dict = split_dataframes(dict(zip(gp.groups.keys(), dfs)))
     export(root_dict)
     return
 
@@ -117,6 +114,26 @@ def outfit_parser(line, it):
 
 ################################################################################
 
+def format_raw(raw_df):
+    useless = ['plural', 'series', 'index', 'thumbnail', '']
+    raw_df.drop(useless, axis='columns', inplace=True)
+    raw_df = raw_df.convert_dtypes()
+    raw_df = raw_df.apply(cast_to_float)
+    raw_df['outfit space'] = raw_df['outfit space'] * -1
+    raw_df['heat generation'] = raw_df['heat generation'] * 60
+    raw_df['energy generation'] = raw_df['energy generation'] * 60
+    return raw_df
+
+################################################################################
+
+def cast_to_float(s):
+    try:
+        return pd.to_numeric(s, downcast='float')
+    except:
+        return s
+
+################################################################################
+
 def split_dataframes(root_dict):
     # Split "Power" category
     power_sheets = ['Power(Battery)', 'Power(Reactor)', 'Power(Solar)']
@@ -126,17 +143,26 @@ def split_dataframes(root_dict):
     # Batteries
     move_rows = power_df.loc[power_df['energy capacity'].notnull()]
     power_dfs[0] = pd.concat([move_rows], join='outer', ignore_index=True)
+    power_dfs[0] = power_dfs[0].convert_dtypes()
     power_dfs[0].dropna(axis='columns', how='all', inplace=True)
+    power_dfs[0]['batt/s'] = \
+        power_dfs[0]['energy capacity'] / power_dfs[0]['outfit space']
     
     # Reactors
     move_rows = power_df.loc[power_df['energy generation'].notnull()]
     power_dfs[1] = pd.concat([move_rows], join='outer', ignore_index=True)
     power_dfs[1].dropna(axis='columns', how='all', inplace=True)
+    power_dfs[1]['e/s'] = \
+        power_dfs[1]['energy generation'] / power_dfs[1]['outfit space']
+    power_dfs[1]['e/h'] = \
+        power_dfs[1]['energy generation'] / power_dfs[1]['heat generation']
 
     # Solar
     move_rows = power_df.loc[power_df['solar collection'].notnull()]
     power_dfs[2] = pd.concat([move_rows], join='outer', ignore_index=True)
     power_dfs[2].dropna(axis='columns', how='all', inplace=True)
+    power_dfs[2]['sol/s'] = \
+        power_dfs[2]['solar collection'] / power_dfs[2]['outfit space']
 
     # Add subcategory dataframes
     power_dict = dict(zip(power_sheets, power_dfs))

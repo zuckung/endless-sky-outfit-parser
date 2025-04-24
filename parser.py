@@ -6,17 +6,18 @@ import pandas as pd
 
 def main():
     print(f'Starting...')
+    data_folder = '.' # change to your data folder
     paths = []
     raw_df = pd.DataFrame()
 
     # Check all subdirectories for outfits
-    for root, dirs, files in os.walk('.'):
+    for root, dirs, files in os.walk(data_folder):
         for name in files:
             if (
                 ('outfits.txt' in name and 'deprecated' not in name) or
-                'human\engines.txt' in os.path.join(root, name) or
-                'human\power.txt' in os.path.join(root, name) or
-                'human\weapons.txt' in os.path.join(root, name)):
+                'human' + os.sep + 'engines.txt' in os.path.join(root, name) or
+                'human' + os.sep + 'power.txt' in os.path.join(root, name) or
+                'human'+ os.sep + 'weapons.txt' in os.path.join(root, name)):
                 paths.append(os.path.join(root, name))
     raw_df = pd.concat([file_parser(path) for path in paths],
                        join='outer', ignore_index=True)
@@ -34,7 +35,7 @@ def main():
 
 def file_parser(path_str):
     print(f'Current file: {path_str}')
-    species = path_str.split('\\')[-2]
+    species = path_str.split(os.sep)[-2]
     path = Path(path_str)
     raw_data = []
     data = []
@@ -220,7 +221,7 @@ def split_dataframes(root_dict):
 
 def export(root_dict):
     # Export to xlsx
-    with pd.ExcelWriter('outfits.xlsx') as writer:
+    with pd.ExcelWriter('outfits.xlsx', engine='xlsxwriter') as writer: # or engine='openpyxl'
         for key, value in root_dict.items():
             value.to_excel(writer, sheet_name=key)
     print(f'Write operation complete.')
